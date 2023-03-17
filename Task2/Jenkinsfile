@@ -1,0 +1,56 @@
+@Library('jenkins-shared-lib@master')_
+
+pipeline {
+    agent any
+    parameters {
+        string(name: 'APP_NAME', defaultValue: 'spring-petclinic', description: '' )
+        string(name: 'APP_VERSION', defaultValue: 'v1', description: '' )
+        string(name: 'REGION', defaultValue: 'us-east-2', description: '' )
+        string(name: 'CLUSTER_NAME', defaultValue: 'demo-dev', description: '' )
+        string(name: 'SERVICE_NAME', defaultValue: 'spring-petclinic', description: '' )
+        string(name: 'TASK_FAMILY', defaultValue: 'spring-petclinic-task', description: '' )
+        string(name: 'ECR_URL', defaultValue: 'xxxxxxxxxxxx.dkr.ecr.us-east-2.amazonaws.com', description: '' )
+        
+    }
+    options { 
+        buildDiscarder(logRotator(numToKeepStr: '50')) 
+    }
+stages {
+    stage('Git Checkout') {
+        steps {
+           dir("app") {
+             repoCheckout(
+                 branch: "master",
+                 url: "https://github.com/ankush0727/spring-petclinic"
+                )
+         }
+         }
+    }
+    stage('Application_build'){
+      steps {
+          dir("app") {
+            mavenStep("build")
+        }
+      }
+    }
+ 
+    stage('ImageBuild_and_Push') {
+        steps {
+           dir("app") {
+            ecs.ecr_login("${params.REGION}")
+            ecs.buildImage("${params.ECR_URL}", "${params.APP_NAME}", "${params.APP_VERSION}")
+            ecs.pushImage("${params.ECR_URL}", "${params.APP_NAME}", "${params.APP_VERSION}")
+            }
+        }
+    }
+ 
+    stage('Deploy_to_ecs') {
+        steps {
+            dir("app") {
+                ecs.deploy("${params.CLUSTER_NAME}", "${params.SERVICE_NAME}", "${params.TASK_FAMILY}", "${params.ECR_URL}:${params.APP_NAME}/${params.APP_VERSION}", "${params.REGION}", true)
+            }
+        }
+
+        }
+    }
+}
